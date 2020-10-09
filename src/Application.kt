@@ -73,6 +73,7 @@ fun Application.module(testing: Boolean = false) {
     val LONGITUDEWGS84 = "longitudeWGS84"
     val ALTITUDEWGS84 = "altitudeWGS84"
     val ALTITUDEAGL = "altitudeAGL"
+    val ALTITUDELN02 = "altitudeLn02"
 
     routing {
 
@@ -82,8 +83,11 @@ fun Application.module(testing: Boolean = false) {
                     , LATITUDEWGS84 to ""
                     , ALTITUDEWGS84 to ""
                     , ALTITUDEAGL to ""
+                    , ALTITUDELN02 to ""
                     , "hasResult" to false
                     , "hasError" to false
+                    , "hasResultRTK" to false
+                    , "hasErrorRTK" to false
             )
             call.respond(FreeMarkerContent("index.ftl", model, ""))
         }
@@ -94,6 +98,7 @@ fun Application.module(testing: Boolean = false) {
             val latitudeWGS84 = formData[LATITUDEWGS84]
             val altitudeWGS84 = formData[ALTITUDEWGS84] ?: ""
             val altitudeAGL = formData[ALTITUDEAGL] ?: ""
+            val altitudeLn02 = formData[ALTITUDELN02] ?: ""
 
             var hasError = false
             val altitudeDiff = try {
@@ -113,9 +118,79 @@ fun Application.module(testing: Boolean = false) {
                     , LATITUDEWGS84 to latitudeWGS84
                     , ALTITUDEWGS84 to altitudeWGS84
                     , ALTITUDEAGL to altitudeAGL
+                    , ALTITUDELN02 to altitudeLn02
                     , "altitudeDiff" to altitudeDiff
                     , "hasResult" to true
                     , "hasError" to hasError
+                    , "hasResultRTK" to false
+                    , "hasErrorRTK" to false
+            ), ""))
+        }
+
+        post("/convert1") {
+            val formData: Parameters = call.receiveParameters()
+            val longitudeWGS84 = formData[LONGITUDEWGS84]
+            val latitudeWGS84 = formData[LATITUDEWGS84]
+            val altitudeWGS84 = formData[ALTITUDEWGS84] ?: ""
+            val altitudeAGL = formData[ALTITUDEAGL] ?: ""
+            val altitudeLn02 = formData[ALTITUDELN02] ?: ""
+
+            var hasError = false
+            val altitudeDiff = try {
+                val gcsLv95 = client.get<GeoCoordinateSystemLv95>("""http://geodesy.geo.admin.ch/reframe/wgs84tolv95?easting=$longitudeWGS84&northing=$latitudeWGS84&format=json""")
+                val height = altitudeLn02
+                val altitude: Float = height.toFloat().plus(altitudeAGL.toFloat())
+                val gcsLv95Converted = client.get<GeoCoordinateSystemLv95>("http://geodesy.geo.admin.ch/reframe/lv95towgs84?easting=${gcsLv95.easting}&northing=${gcsLv95.northing}&altitude=$altitude&format=json")
+                gcsLv95Converted.altitude.toFloat().minus(altitudeWGS84.toFloat())
+            } catch (e: Exception) {
+                log.warn("fehler", e)
+                hasError = true
+            }
+
+
+            call.respond(FreeMarkerContent("index.ftl", mapOf(
+                    LONGITUDEWGS84 to longitudeWGS84
+                    , LATITUDEWGS84 to latitudeWGS84
+                    , ALTITUDEWGS84 to altitudeWGS84
+                    , ALTITUDEAGL to altitudeAGL
+                    , ALTITUDELN02 to altitudeLn02
+                    , "altitudeDiff" to altitudeDiff
+                    , "hasResult" to true
+                    , "hasError" to hasError
+                    , "hasResultRTK" to false
+                    , "hasErrorRTK" to false
+            ), ""))
+        }
+
+        post("/convertRTK") {
+            val formData: Parameters = call.receiveParameters()
+            val longitudeWGS84 = formData[LONGITUDEWGS84]
+            val latitudeWGS84 = formData[LATITUDEWGS84]
+
+            var hasError = false
+            val altitudeDiff = try {
+                val gcsLv95 = client.get<GeoCoordinateSystemLv95>("""http://geodesy.geo.admin.ch/reframe/wgs84tolv95?easting=$longitudeWGS84&northing=$latitudeWGS84&format=json""")
+                val height = client.get<Height>("https://api3.geo.admin.ch/rest/services/height?easting=${gcsLv95.easting}&northing=${gcsLv95.northing}")
+                val altitude: Float = height.height.toFloat();
+                val gcsLv95Converted = client.get<GeoCoordinateSystemLv95>("http://geodesy.geo.admin.ch/reframe/ln02tobessel?easting=${gcsLv95.easting}&northing=${gcsLv95.northing}&altitude=$altitude&format=json")
+                altitude.minus(gcsLv95Converted.altitude.toFloat())
+            } catch (e: Exception) {
+                log.warn("fehler", e)
+                hasError = true
+            }
+
+
+            call.respond(FreeMarkerContent("index.ftl", mapOf(
+                    LONGITUDEWGS84 to longitudeWGS84
+                    , LATITUDEWGS84 to latitudeWGS84
+                    , ALTITUDEWGS84 to ""
+                    , ALTITUDEAGL to ""
+                    , ALTITUDELN02 to ""
+                    , "altitudeDiff" to altitudeDiff
+                    , "hasResult" to false
+                    , "hasError" to false
+                    , "hasResultRTK" to true
+                    , "hasErrorRTK" to hasError
             ), ""))
         }
 

@@ -12,7 +12,7 @@ plugins {
 }
 
 group = "ch.exasoft.geoservices"
-version = "0.0.1"
+version = "0.0.2"
 
 application {
     mainClassName = "io.ktor.server.tomcat.EngineMain"
